@@ -1,0 +1,92 @@
+<component name="InspectionProjectProfileManager">
+  <profile version="1.0">
+    <option name="myName" value="Project Default" />
+    <inspection_tool class="PyPackageRequirementsInspection" enabled="true" level="WARNING" enabled_by_default="true">
+      <option name="ignoredPackages">
+        <value>
+          <list size="41">
+            <item index="0" class="java.lang.String" itemvalue="ecdsa" />
+            <item index="1" class="java.lang.String" itemvalue="django.utils.six" />
+            <item index="2" class="java.lang.String" itemvalue="cryptotools-0.1" />
+            <item index="3" class="java.lang.String" itemvalue="pycryptodome" />
+            <item index="4" class="java.lang.String" itemvalue="six" />
+            <item index="5" class="java.lang.String" itemvalue="botocore" />
+            <item index="6" class="java.lang.String" itemvalue="django-crispy-forms" />
+            <item index="7" class="java.lang.String" itemvalue="django-mathfilters" />
+            <item index="8" class="java.lang.String" itemvalue="python-dateutil" />
+            <item index="9" class="java.lang.String" itemvalue="psycopg2-binary" />
+            <item index="10" class="java.lang.String" itemvalue="tzdata" />
+            <item index="11" class="java.lang.String" itemvalue="asgiref" />
+            <item index="12" class="java.lang.String" itemvalue="django-allow-cidr" />
+            <item index="13" class="java.lang.String" itemvalue="packaging" />
+            <item index="14" class="java.lang.String" itemvalue="django-storages" />
+            <item index="15" class="java.lang.String" itemvalue="gunicorn" />
+            <item index="16" class="java.lang.String" itemvalue="sqlparse" />
+            <item index="17" class="java.lang.String" itemvalue="jmespath" />
+            <item index="18" class="java.lang.String" itemvalue="boto3" />
+            <item index="19" class="java.lang.String" itemvalue="Django" />
+            <item index="20" class="java.lang.String" itemvalue="urllib3" />
+            <item index="21" class="java.lang.String" itemvalue="pyparsing" />
+            <item index="22" class="java.lang.String" itemvalue="django-utils-six" />
+            <item index="23" class="java.lang.String" itemvalue="Pillow" />
+            <item index="24" class="java.lang.String" itemvalue="django-environ" />
+            <item index="25" class="java.lang.String" itemvalue="django-countries" />
+            <item index="26" class="java.lang.String" itemvalue="djangorestframework-jwt" />
+            <item index="27" class="java.lang.String" itemvalue="django-colorfield" />
+            <item index="28" class="java.lang.String" itemvalue="django-rest-swagger" />
+            <item index="29" class="java.lang.String" itemvalue="django-dotenv" />
+            <item index="30" class="java.lang.String" itemvalue="django-phonenumber-field" />
+            <item index="31" class="java.lang.String" itemvalue="djangorestframework" />
+            <item index="32" class="java.lang.String" itemvalue="django-cors-headers" />
+            <item index="33" class="java.lang.String" itemvalue="channels-redis" />
+            <item index="34" class="java.lang.String" itemvalue="channels" />
+            <item index="35" class="java.lang.String" itemvalue="google" />
+            <item index="36" class="java.lang.String" itemvalue="environ" />
+            <item index="37" class="java.lang.String" itemvalue="cryptography" />
+            <item index="38" class="java.lang.String" itemvalue="jwt" />
+            <item index="39" class="java.lang.String" itemvalue="importlib-metadata" />
+            <item index="40" class="java.lang.String" itemvalue="python-dotenv" />
+          </list>
+        </value>
+      </option>
+    </inspection_tool>
+    <inspection_tool class="PyPep8Inspection" enabled="true" level="WEAK WARNING" enabled_by_default="true">
+      <option name="ignoredErrors">
+        <list>
+          <option value="E266" />
+          <option value="W292" />
+        </list>
+      </option>
+    </inspection_tool>
+    <inspection_tool class="PyPep8NamingInspection" enabled="true" level="WEAK WARNING" enabled_by_default="true">
+      <option name="ignoredErrors">
+        <list>
+          <option value="N802" />
+          <option value="N806" />
+          <option value="N803" />
+          <option value="N801" />
+        </list>
+      </option>
+    </inspection_tool>
+    <inspection_tool class="PyStubPackagesAdvertiser" enabled="true" level="WARNING" enabled_by_default="true">
+      <option name="ignoredPackages">
+        <list>
+          <option value="coincurve-stubs==9.0.0" />
+        </list>
+      </option>
+    </inspection_tool>
+    <inspection_tool class="PyTypeCheckerInspection" enabled="false" level="WARNING" enabled_by_default="false" />
+    <inspection_tool class="PyUnresolvedReferencesInspection" enabled="true" level="WARNING" enabled_by_default="true">
+      <option name="ignoredIdentifiers">
+        <list>
+          <option value="dashboard.models.ConnectingSoftware.*" />
+          <option value="dashboard.models.XeroAppConnection.*" />
+          <option value="accounts.models.Organization.*" />
+          <option value="dashboard.models.Cin7AppConnection.*" />
+          <option value="accounts.models.Profile.*" />
+        </list>
+      </option>
+    </inspection_tool>
+    <inspection_tool class="StrFormatInspection" enabled="false" level="WARNING" enabled_by_default="false" />
+  </profile>
+</component>
