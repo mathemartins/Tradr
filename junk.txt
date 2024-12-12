@@ -1,3 +1,8 @@
+
+Look at this code and use that to fix the usage
+
+The code
+
 from django.db.models import (
     Avg,
     F,
@@ -396,3 +401,12 @@ def get_indicators(ticker, days=30, data_type="stock"):
             **rsi_data,
         },
     }
+
+The usage
+ticker = "C:EURUSD"
+days = 30
+queryset = market_services.get_daily_forex_quotes_queryset(ticker, days=days)
+averages = market_services.get_daily_moving_averages(ticker, days=days, queryset=queryset)
+price_target = market_services.get_price_target(ticker, days=days, queryset=queryset)
+volume_trend = market_services.get_volume_trend(ticker, days=days, queryset=queryset)
+rsi_data = market_services.calculate_rsi(ticker, days=days, period=14)
