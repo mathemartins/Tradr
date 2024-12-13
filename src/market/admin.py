@@ -43,10 +43,11 @@ class CompanyAdmin(admin.ModelAdmin):
     Admin interface for managing Company instances.
     """
     list_display = ('name', 'ticker', 'active', 'last_updated', 'view_quotes')
+    list_editable = ('active',)
     list_filter = ('active', 'timestamp', 'updated', 'category')
     search_fields = ('name', 'ticker')
     readonly_fields = ('timestamp', 'updated')
-    inlines = [QuoteInline]
+    # inlines = [QuoteInline]
 
     def last_updated(self, obj):
         """

@@ -9,7 +9,7 @@ from django.db.models import (
     DecimalField,
     Case,
     When,
-    Value
+    Value, StdDev
 )
 from django.db.models.functions import TruncDate, FirstValue, Lag, Coalesce
 from django.utils import timezone
@@ -17,6 +17,110 @@ from datetime import timedelta
 from decimal import Decimal
 
 from .models import Quote
+
+
+def calculate_fibonacci_levels(current_price, high, low):
+    """
+    Calculate Fibonacci retracement and extension levels.
+    """
+    # Ensure all inputs are Decimals
+    current_price = Decimal(current_price)
+    high = Decimal(high)
+    low = Decimal(low)
+
+    diff = high - low
+    levels = {
+        "23.6%": high - (diff * Decimal("0.236")),
+        "38.2%": high - (diff * Decimal("0.382")),
+        "50.0%": high - (diff * Decimal("0.5")),
+        "61.8%": high - (diff * Decimal("0.618")),
+        "78.6%": high - (diff * Decimal("0.786")),
+        "current_price": current_price,
+    }
+    return {k: round(v, 4) for k, v in levels.items()}
+
+
+# def get_daily_quotes_queryset(ticker, days=28, use_bucket=False):
+#     """
+#     Fetches the latest daily quotes for the given ticker.
+#     """
+#     now = timezone.now()
+#     start_date = now - timedelta(days=days)
+#     latest_daily_timestamps = (
+#         Quote.objects.filter(company__ticker=ticker, time__range=(start_date, now))
+#         .annotate(date=TruncDate('time'))
+#         .values('company', 'date')
+#         .annotate(latest_time=Max('time'))
+#         .values('latest_time')
+#     )
+#     timestamps = [x['latest_time'] for x in latest_daily_timestamps]
+#     qs = Quote.objects.filter(
+#         company__ticker=ticker,
+#         time__range=(start_date, now),
+#         time__in=timestamps
+#     )
+#     if use_bucket:
+#         return qs.time_bucket('time', '1 day')
+#     return qs
+
+
+def calculate_bollinger_bands(ticker, days=20, queryset=None):
+    """
+    Calculate Bollinger Bands.
+    """
+    queryset = get_daily_quotes_queryset(ticker, days=days)
+    data = queryset.aggregate(
+        sma=Avg('close_price'),
+        std_dev=StdDev('close_price')
+    )
+    if not data or data['sma'] is None or data['std_dev'] is None:
+        return None
+    sma = data['sma']
+    std_dev = data['std_dev']
+    upper_band = sma + (std_dev * 2)
+    lower_band = sma - (std_dev * 2)
+    return {
+        "upper_band": round(upper_band, 4),
+        "lower_band": round(lower_band, 4),
+        "sma": round(sma, 4)
+    }
+
+
+def calculate_macd(ticker, queryset=None, short_period=12, long_period=26, signal_period=9):
+    """
+    Calculate MACD and Signal Line.
+    """
+    if queryset is None:
+        queryset = get_daily_quotes_queryset(ticker, days=long_period + signal_period)
+
+    # Extract close prices
+    prices = queryset.values_list('close_price', flat=True)
+    if len(prices) < long_period:
+        return None
+
+    # Calculate EMAs
+    short_ema = calculate_ema(prices, short_period)
+    long_ema = calculate_ema(prices, long_period)
+    macd_line = [s - l for s, l in zip(short_ema, long_ema)]
+    signal_line = calculate_ema(macd_line, signal_period)
+    histogram = [m - s for m, s in zip(macd_line[-len(signal_line):], signal_line)]
+
+    return {
+        "macd": round(macd_line[-1], 4),
+        "signal": round(signal_line[-1], 4),
+        "histogram": round(histogram[-1], 4)
+    }
+
+
+def calculate_ema(prices, period):
+    """
+    Helper function to calculate EMA.
+    """
+    multiplier = Decimal(2) / Decimal(period + 1)  # Convert multiplier to Decimal
+    ema = [sum(prices[:period]) / period]  # Initial SMA (assumes prices are Decimals)
+    for price in prices[period:]:
+        ema.append((price - ema[-1]) * multiplier + ema[-1])
+    return ema
 
 
 def get_daily_quotes_queryset(ticker, days=28, use_bucket=False):
@@ -284,36 +388,57 @@ def get_stock_indicators(ticker="AAPL", days=30):
     price_target = get_price_target(ticker, days=days, queryset=queryset)
     volume_trend = get_volume_trend(ticker, days=days, queryset=queryset)
     rsi_data = calculate_rsi(ticker, days=days, period=14)
-    signals = []
-    if averages.get('ma_5') > averages.get('ma_20'):
-        signals.append(1)
-    else:
-        signals.append(-1)
-    if price_target.get('current_price') < price_target.get('conservative_target'):
-        signals.append(1)
-    else:
-        signals.append(-1)
-    if volume_trend.get("volume_change_percent") > 20:
-        signals.append(1)
-    elif volume_trend.get("volume_change_percent") < -20:
-        signals.append(-1)
-    else:
-        signals.append(0)
-    rsi = rsi_data.get('rsi')
-    if rsi > 70:
-        signals.append(-1)  # Overbought
-    elif rsi < 30:
-        signals.append(1)  # Oversold
-    else:
-        signals.append(0)
-    return {
-        "score": sum(signals),
-        "ticker": ticker,
-        "indicators": {
-            **averages,
-            **price_target,
-            **volume_trend,
-            **rsi_data,
-        }
+    bollinger_bands = calculate_bollinger_bands(ticker, days=days, queryset=queryset)
+    macd_data = calculate_macd(ticker, days=days, queryset=queryset)
 
+    return {
+        "averages": averages,
+        "price_target": price_target,
+        "volume_trend": volume_trend,
+        "rsi": rsi_data,
+        "bollinger_bands": bollinger_bands,
+        "macd": macd_data,
     }
+
+
+def detect_market_trend(data):
+    """
+    Detect whether the market is bullish or bearish based on indicators.
+    :param data: A dictionary containing stock indicators.
+    :return: A string indicating 'bullish', 'bearish', or 'neutral'.
+    """
+    ma_5 = data.get("ma_5")
+    ma_20 = data.get("ma_20")
+    rsi = data.get("rsi")
+    volume_change = data.get("volume_change_percent")
+    current_price = data.get("current_price")
+    upper_band = data.get("upper_band")
+    lower_band = data.get("lower_band")
+
+    # Check Moving Averages
+    if ma_5 > ma_20:
+        trend = "bullish"
+    elif ma_5 < ma_20:
+        trend = "bearish"
+    else:
+        trend = "neutral"
+
+    # Incorporate RSI
+    if rsi > 70:
+        trend = "bearish"  # Overbought
+    elif rsi < 30:
+        trend = "bullish"  # Oversold
+
+    # Use Bollinger Bands for further confirmation
+    if current_price > upper_band:
+        trend = "bearish"  # Price above the band suggests overbought.
+    elif current_price < lower_band:
+        trend = "bullish"  # Price below the band suggests oversold.
+
+    # Volume Trend
+    if volume_change > 20 and trend == "bullish":
+        return "bullish"
+    elif volume_change < -20 and trend == "bearish":
+        return "bearish"
+
+    return trend
