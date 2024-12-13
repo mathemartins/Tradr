@@ -16,15 +16,15 @@ from django.utils import timezone
 from datetime import timedelta
 from decimal import Decimal
 
-from .models import StockQuote, ForexQuote, CryptoQuote
+from .models import Quote
 
 
-def get_daily_stock_quotes_queryset(ticker, days=28, use_bucket=False):
+def get_daily_quotes_queryset(ticker, days=28, use_bucket=False):
     now = timezone.now()
     start_date = now - timedelta(days=days)
     end_date = now
     latest_daily_timestamps = (
-        StockQuote.objects.filter(company__ticker=ticker, time__range=(start_date - timedelta(days=40), end_date))
+        Quote.objects.filter(company__ticker=ticker, time__range=(start_date - timedelta(days=40), end_date))
         .annotate(date=TruncDate('time'))
         .values('company', 'date')
         .annotate(latest_time=Max('time'))
@@ -32,7 +32,7 @@ def get_daily_stock_quotes_queryset(ticker, days=28, use_bucket=False):
         .order_by('date')
     )
     actual_timestamps = [x['latest_time'] for x in latest_daily_timestamps]
-    qs = StockQuote.timescale.filter(
+    qs = Quote.timescale.filter(
         company__ticker=ticker,
         time__range=(start_date, end_date),
         time__in=actual_timestamps
@@ -42,65 +42,20 @@ def get_daily_stock_quotes_queryset(ticker, days=28, use_bucket=False):
     return qs
 
 
-def get_daily_forex_quotes_queryset(ticker, days=28, use_bucket=False):
-    now = timezone.now()
-    start_date = now - timedelta(days=days)
-    end_date = now
-    latest_daily_timestamps = (
-        ForexQuote.objects.filter(company__ticker=ticker, time__range=(start_date - timedelta(days=40), end_date))
-        .annotate(date=TruncDate('time'))
-        .values('company', 'date')
-        .annotate(latest_time=Max('time'))
-        .values('company', 'date', 'latest_time')
-        .order_by('date')
-    )
-    actual_timestamps = [x['latest_time'] for x in latest_daily_timestamps]
-    qs = ForexQuote.timescale.filter(
-        company__ticker=ticker,
-        time__range=(start_date, end_date),
-        time__in=actual_timestamps
-    )
-    if use_bucket:
-        return qs.time_bucket('time', '1 day')
-    return qs
-
-
-def get_daily_crypto_quotes_queryset(ticker, days=28, use_bucket=False):
-    now = timezone.now()
-    start_date = now - timedelta(days=days)
-    end_date = now
-    latest_daily_timestamps = (
-        CryptoQuote.objects.filter(company__ticker=ticker, time__range=(start_date - timedelta(days=40), end_date))
-        .annotate(date=TruncDate('time'))
-        .values('company', 'date')
-        .annotate(latest_time=Max('time'))
-        .values('company', 'date', 'latest_time')
-        .order_by('date')
-    )
-    actual_timestamps = [x['latest_time'] for x in latest_daily_timestamps]
-    qs = CryptoQuote.timescale.filter(
-        company__ticker=ticker,
-        time__range=(start_date, end_date),
-        time__in=actual_timestamps
-    )
-    if use_bucket:
-        return qs.time_bucket('time', '1 day')
-    return qs
-
-
-def get_daily_moving_averages(ticker, days=28, queryset_function=get_daily_forex_quotes_queryset):
+def get_daily_moving_averages(ticker, days=28, queryset=None):
     """
     Calculate daily moving averages (MA5 and MA20).
 
     Args:
         ticker (str): The ticker symbol.
         days (int): Number of days to include.
-        queryset_function (callable): Function to fetch the queryset.
+        queryset (callable): Function to fetch the queryset.
 
     Returns:
         dict: Moving averages (MA5 and MA20).
     """
-    queryset = queryset_function(ticker=ticker, days=days)
+    if queryset is None:
+        queryset = get_daily_quotes_queryset(ticker=ticker, days=days)
     obj = queryset.annotate(
         ma_5=Window(
             expression=Avg('close_price'),
@@ -119,27 +74,30 @@ def get_daily_moving_averages(ticker, days=28, queryset_function=get_daily_forex
         return None
     ma_5 = obj.ma_5
     ma_20 = obj.ma_20
-    if ma_5 is None or ma_20 is None or ma_5 <= 0 or ma_20 <= 0:
+    if ma_5 is None or ma_20 is None:
+        return None
+    if ma_5 <= 0 or ma_20 <= 0:
         return None
     return {
         "ma_5": float(round(ma_5, 4)),
-        "ma_20": float(round(ma_20, 4)),
+        "ma_20": float(round(ma_20, 4))
     }
 
 
-def get_price_target(ticker, days=28, queryset_function=get_daily_forex_quotes_queryset):
+def get_price_target(ticker, days=28, queryset=None):
     """
     Calculate price targets based on historical data.
 
     Args:
         ticker (str): The ticker symbol.
         days (int): Number of days to include.
-        queryset_function (callable): Function to fetch the queryset.
+        queryset (callable): Function to fetch the queryset.
 
     Returns:
         dict: Current price, conservative target, aggressive target, and average price.
     """
-    queryset = queryset_function(ticker=ticker, days=days)
+    if queryset is None:
+        queryset = get_daily_quotes_queryset(ticker, days=days)
     daily_data = (
         queryset
         .annotate(
@@ -163,6 +121,7 @@ def get_price_target(ticker, days=28, queryset_function=get_daily_forex_quotes_q
     avg_price = float(daily_data['avg_price'])
     price_range = float(daily_data['highest']) - float(daily_data['lowest'])
 
+    # Simple target based on average price and recent range
     conservative_target = current_price + (price_range * 0.382)  # 38.2% Fibonacci
     aggressive_target = current_price + (price_range * 0.618)  # 61.8% Fibonacci
 
@@ -170,23 +129,24 @@ def get_price_target(ticker, days=28, queryset_function=get_daily_forex_quotes_q
         'current_price': round(current_price, 4),
         'conservative_target': round(conservative_target, 4),
         'aggressive_target': round(aggressive_target, 4),
-        'average_price': round(avg_price, 4),
+        'average_price': round(avg_price, 4)
     }
 
 
-def get_volume_trend(ticker, days=28, queryset_function=get_daily_forex_quotes_queryset):
+def get_volume_trend(ticker, days=28, queryset=None):
     """
     Analyze recent volume trends.
 
     Args:
         ticker (str): The ticker symbol.
         days (int): Number of days to include.
-        queryset_function (callable): Function to fetch the queryset.
+        queryset (callable): Function to fetch the queryset.
 
     Returns:
         dict: Average volume, latest volume, and percentage change in volume.
     """
-    queryset = queryset_function(ticker=ticker, days=days)
+    if queryset is None:
+        queryset = get_daily_quotes_queryset(ticker=ticker, days=days)
     start = -(days - 1)
     data = queryset.annotate(
         avg_volume=Window(
@@ -209,26 +169,28 @@ def get_volume_trend(ticker, days=28, queryset_function=get_daily_forex_quotes_q
     return {
         'avg_volume': float(avg_vol),
         'latest_volume': int(vol),
-        'volume_change_percent': float(volume_change),
+        'volume_change_percent': float(volume_change)
     }
 
 
-def calculate_rsi(ticker, days=28, queryset_function=get_daily_forex_quotes_queryset, period=14):
+def calculate_rsi(ticker, days=28, queryset=None, period=14):
     """
     Calculate Relative Strength Index (RSI) using Django ORM.
 
     Args:
         ticker (str): Stock ticker symbol.
         days (int): Days in the price data (default: 28).
-        queryset_function (callable): Function to fetch the queryset.
+        queryset (callable): Function to fetch the queryset.
         period (int): RSI period (default: 14).
 
     Returns:
         dict: RSI value and component calculations.
     """
+    # Get daily price data
     if period is None:
         period = int(days / 4)
-    queryset = queryset_function(ticker=ticker, days=days, use_bucket=True)
+    if queryset is None:
+        queryset = get_daily_quotes_queryset(ticker, days=days, use_bucket=True)
 
     # Calculate price changes and gains/losses with explicit decimal conversion
     movement = queryset.annotate(
@@ -314,59 +276,20 @@ def calculate_rsi(ticker, days=28, queryset_function=get_daily_forex_quotes_quer
     }
 
 
-def get_indicators(ticker, days=30, data_type="stock"):
-    """
-    Get financial indicators (moving averages, price targets, volume trends, RSI) for a given data type.
-
-    Args:
-        ticker (str): The ticker symbol.
-        days (int): Number of days to include in the analysis.
-        data_type (str): Type of data ("stock", "forex", "crypto").
-
-    Returns:
-        dict: Indicators and their calculated values.
-    """
-    # Map data_type to models and queryset functions
-    data_mapping = {
-        "stock": {
-            "model": StockQuote,
-            "queryset_function": get_daily_stock_quotes_queryset,
-        },
-        "forex": {
-            "model": ForexQuote,
-            "queryset_function": get_daily_forex_quotes_queryset,
-        },
-        "crypto": {
-            "model": CryptoQuote,
-            "queryset_function": get_daily_crypto_quotes_queryset,
-        },
-    }
-
-    # Ensure valid data type
-    if data_type not in data_mapping:
-        raise ValueError(f"Invalid data_type: {data_type}. Must be one of {list(data_mapping.keys())}.")
-
-    model = data_mapping[data_type]["model"]
-    queryset_function = data_mapping[data_type]["queryset_function"]
-
-    # Fetch queryset
-    queryset = queryset_function(ticker, days=days)
+def get_stock_indicators(ticker="AAPL", days=30):
+    queryset = get_daily_quotes_queryset(ticker, days=days)
     if queryset.count() == 0:
-        raise Exception(f"Data for {ticker} not found in {data_type}.")
-
-    # Calculate indicators
-    averages = get_daily_moving_averages(ticker, days=days, queryset_function=queryset_function)
-    price_target = get_price_target(ticker, days=days, queryset_function=queryset_function)
-    volume_trend = get_volume_trend(ticker, days=days, queryset_function=queryset_function)
-    rsi_data = calculate_rsi(ticker, days=days, queryset_function=queryset_function, period=14)
-
-    # Determine signals
+        raise Exception(f"Data for {ticker} not found")
+    averages = get_daily_moving_averages(ticker, days=days, queryset=queryset)
+    price_target = get_price_target(ticker, days=days, queryset=queryset)
+    volume_trend = get_volume_trend(ticker, days=days, queryset=queryset)
+    rsi_data = calculate_rsi(ticker, days=days, period=14)
     signals = []
-    if averages.get("ma_5") > averages.get("ma_20"):
+    if averages.get('ma_5') > averages.get('ma_20'):
         signals.append(1)
     else:
         signals.append(-1)
-    if price_target.get("current_price") < price_target.get("conservative_target"):
+    if price_target.get('current_price') < price_target.get('conservative_target'):
         signals.append(1)
     else:
         signals.append(-1)
@@ -376,23 +299,21 @@ def get_indicators(ticker, days=30, data_type="stock"):
         signals.append(-1)
     else:
         signals.append(0)
-    rsi = rsi_data.get("rsi")
+    rsi = rsi_data.get('rsi')
     if rsi > 70:
         signals.append(-1)  # Overbought
     elif rsi < 30:
         signals.append(1)  # Oversold
     else:
         signals.append(0)
-
-    # Combine indicators and return
     return {
         "score": sum(signals),
         "ticker": ticker,
-        "data_type": data_type,
         "indicators": {
             **averages,
             **price_target,
             **volume_trend,
             **rsi_data,
-        },
+        }
+
     }

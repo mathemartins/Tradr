@@ -127,44 +127,12 @@ class PolygonAPIClient:
         response.raise_for_status()  # Raise exception for HTTP errors
         return response.json()
 
-    def get_stock_data(self) -> List[TransformedStockResult]:
+    def get_data(self) -> List[TransformedStockResult]:
         """
-        Fetch and transform stock data.
+        Fetch and transform data.
 
         Returns:
-            List[TransformedStockResult]: A list of transformed stock data dictionaries.
-
-        Raises:
-            Exception: If no results are found for the ticker.
-        """
-        data: PolygonAPIResponse = self.fetch_data()
-        results: Optional[List[Dict[str, Union[float, int]]]] = data.get("results")  # type: ignore
-        if results is None:
-            raise Exception(f"Ticker {self.ticker} has no results")
-        return [transform_polygon_result(result) for result in results]
-
-    def get_forex_data(self) -> List[TransformedStockResult]:
-        """
-        Fetch and transform stock data.
-
-        Returns:
-            List[TransformedStockResult]: A list of transformed stock data dictionaries.
-
-        Raises:
-            Exception: If no results are found for the ticker.
-        """
-        data: PolygonAPIResponse = self.fetch_data()
-        results: Optional[List[Dict[str, Union[float, int]]]] = data.get("results")  # type: ignore
-        if results is None:
-            raise Exception(f"Ticker {self.ticker} has no results")
-        return [transform_polygon_result(result) for result in results]
-
-    def get_crypto_data(self) -> List[TransformedStockResult]:
-        """
-        Fetch and transform stock data.
-
-        Returns:
-            List[TransformedStockResult]: A list of transformed stock data dictionaries.
+            List[TransformedStockResult]: A list of transformed data dictionaries.
 
         Raises:
             Exception: If no results are found for the ticker.
