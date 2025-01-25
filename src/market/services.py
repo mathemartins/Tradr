@@ -380,24 +380,104 @@ def calculate_rsi(ticker, days=28, queryset=None, period=14):
     }
 
 
-def get_stock_indicators(ticker="AAPL", days=30):
+def get_stock_indicators(ticker="C:USDJPY", days=30):
+    # Step 1: Fetch raw data
     queryset = get_daily_quotes_queryset(ticker, days=days)
     if queryset.count() == 0:
         raise Exception(f"Data for {ticker} not found")
+
+    # Step 2: Fetch or calculate indicators
+    # Averages and trends
     averages = get_daily_moving_averages(ticker, days=days, queryset=queryset)
     price_target = get_price_target(ticker, days=days, queryset=queryset)
     volume_trend = get_volume_trend(ticker, days=days, queryset=queryset)
-    rsi_data = calculate_rsi(ticker, days=days, period=14)
-    bollinger_bands = calculate_bollinger_bands(ticker, days=days, queryset=queryset)
-    macd_data = calculate_macd(ticker, days=days, queryset=queryset)
 
+    # RSI
+    rsi_data = calculate_rsi(ticker, days=days, period=14)
+
+    # Bollinger Bands
+    bollinger_bands = calculate_bollinger_bands(ticker, days=days, queryset=queryset)
+
+    # MACD
+    macd_data = calculate_macd(ticker, queryset=queryset)
+
+    # Fibonacci levels
+    recent_high = queryset.aggregate(Max('high_price'))['high_price__max']
+    recent_low = queryset.aggregate(Min('low_price'))['low_price__min']
+    current_price = queryset.latest('time').close_price
+
+    fibonacci_levels = (
+        calculate_fibonacci_levels(current_price, recent_high, recent_low)
+        if recent_high and recent_low
+        else None
+    )
+
+    # Step 3: Generate trading signals
+    signals = []
+    # Moving averages: Compare short-term vs long-term MA
+    if averages.get('ma_5') and averages.get('ma_20') and averages['ma_5'] > averages['ma_20']:
+        signals.append(1)  # Bullish
+    else:
+        signals.append(-1)  # Bearish
+
+    # Price target: Compare current price with conservative target
+    if price_target.get('current_price') and price_target.get('conservative_target') and \
+            price_target['current_price'] < price_target['conservative_target']:
+        signals.append(1)  # Bullish
+    else:
+        signals.append(-1)  # Bearish
+
+    # Volume trend: Check for significant volume change
+    volume_change_percent = volume_trend.get("volume_change_percent")
+    if volume_change_percent is not None:
+        if volume_change_percent > 20:
+            signals.append(1)  # Bullish
+        elif volume_change_percent < -20:
+            signals.append(-1)  # Bearish
+        else:
+            signals.append(0)  # Neutral
+
+    # RSI: Overbought or oversold condition
+    rsi = rsi_data.get('rsi')
+    if rsi:
+        if rsi > 70:
+            signals.append(-1)  # Overbought (sell)
+        elif rsi < 30:
+            signals.append(1)  # Oversold (buy)
+        else:
+            signals.append(0)  # Neutral
+
+    # Bollinger Bands: Check if price is above/below the bands
+    if bollinger_bands:
+        if current_price > bollinger_bands["upper_band"]:
+            signals.append(-1)  # Overbought (sell)
+        elif current_price < bollinger_bands["lower_band"]:
+            signals.append(1)  # Oversold (buy)
+        else:
+            signals.append(0)  # Neutral
+
+    # MACD: Bullish or bearish trend
+    if macd_data:
+        macd_histogram = macd_data.get("histogram")
+        if macd_histogram:
+            if macd_histogram > 0:
+                signals.append(1)  # Bullish (buy)
+            else:
+                signals.append(-1)  # Bearish (sell)
+
+    # Step 4: Combine and return results
     return {
-        "averages": averages,
-        "price_target": price_target,
-        "volume_trend": volume_trend,
-        "rsi": rsi_data,
-        "bollinger_bands": bollinger_bands,
-        "macd": macd_data,
+        "score": sum(signals),
+        "ticker": ticker,
+        "indicators": {
+            **averages,
+            **price_target,
+            **volume_trend,
+            **rsi_data,
+            **(bollinger_bands or {}),
+            **(macd_data or {}),
+            **(fibonacci_levels or {}),
+        },
     }
 
 
